@@ -1,0 +1,257 @@
+// ─── Prisma Schema – Student Organization Management System (Phase 1 + 2 + 3) ───
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlserver"
+  url      = env("DATABASE_URL")
+}
+
+// Note: SQL Server does not support Prisma enums.
+// All enum values are enforced at the application layer via Zod and constants.
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 1 – Users
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model User {
+  id           String   @id @default(uuid())
+  fullName     String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("STUDENT")
+  studentId    String?  @unique
+  phone        String?
+  collegeName  String?
+  year         String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Phase 2 relations
+  createdEvents         Event[]                @relation("EventCreator")
+  memberships           Membership[]
+  eventTickets          EventTicket[]
+  volunteerApplications VolunteerApplication[] @relation("VolunteerApplicant")
+  reviewedApplications  VolunteerApplication[] @relation("ApplicationReviewer")
+  assignedTasks         VolunteerTask[]        @relation("TaskVolunteer")
+  tasksAssignedByMe     VolunteerTask[]        @relation("TaskAssigner")
+
+  // Phase 3 relations
+  scannedCheckIns       TicketCheckIn[]        @relation("CheckInScanner")
+  merchandiseOrders     MerchandiseOrder[]
+  createdAnnouncements  Announcement[]         @relation("AnnouncementCreator")
+  announcementsReceived AnnouncementRecipient[]
+
+  @@map("users")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2 – Events
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model Event {
+  id              String   @id @default(uuid())
+  title           String
+  description     String
+  eventDate       DateTime
+  startTime       DateTime
+  endTime         DateTime
+  location        String
+  createdById     String
+  status          String   @default("DRAFT")
+  needsVolunteers Boolean  @default(false)
+  volunteerLimit  Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  createdBy             User                   @relation("EventCreator", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  tickets               EventTicket[]
+  volunteerApplications VolunteerApplication[]
+  volunteerTasks        VolunteerTask[]
+
+  // Phase 3 relations
+  checkIns              TicketCheckIn[]
+  targetAnnouncements   Announcement[]         @relation("EventTargetAnnouncements")
+
+  @@map("events")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2 – Memberships
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model Membership {
+  id             String   @id @default(uuid())
+  userId         String
+  membershipType String
+  startDate      DateTime
+  endDate        DateTime
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("memberships")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2 – Event Tickets
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model EventTicket {
+  id           String   @id @default(uuid())
+  eventId      String
+  userId       String
+  ticketCode   String   @unique
+  status       String   @default("ACTIVE")
+  registeredAt DateTime @default(now())
+
+  event   Event          @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user    User           @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Phase 3 relation
+  checkIn TicketCheckIn?
+
+  @@unique([eventId, userId])
+  @@map("event_tickets")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2 – Volunteer Applications
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model VolunteerApplication {
+  id           String    @id @default(uuid())
+  eventId      String
+  userId       String
+  status       String    @default("PENDING")
+  appliedAt    DateTime  @default(now())
+  reviewedAt   DateTime?
+  reviewedById String?
+
+  event      Event @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user       User  @relation("VolunteerApplicant", fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reviewedBy User? @relation("ApplicationReviewer", fields: [reviewedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([eventId, userId])
+  @@map("volunteer_applications")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2 – Volunteer Tasks
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model VolunteerTask {
+  id              String    @id @default(uuid())
+  eventId         String
+  volunteerUserId String
+  assignedById    String
+  taskType        String
+  taskTitle       String
+  description     String?
+  startTime       DateTime?
+  endTime         DateTime?
+  location        String?
+  status          String    @default("ASSIGNED")
+  assignedAt      DateTime  @default(now())
+
+  event     Event @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  volunteer User  @relation("TaskVolunteer", fields: [volunteerUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  assignedBy User @relation("TaskAssigner", fields: [assignedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("volunteer_tasks")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 3 – Ticket Check-In (Attendance)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model TicketCheckIn {
+  id          String   @id @default(uuid())
+  ticketId    String   @unique
+  eventId     String
+  scannedById String
+  scannedAt   DateTime @default(now())
+
+  ticket    EventTicket @relation(fields: [ticketId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  event     Event       @relation(fields: [eventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  scannedBy User        @relation("CheckInScanner", fields: [scannedById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("ticket_checkins")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 3 – Merchandise
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model Merchandise {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  size          String?
+  stockQuantity Int
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orders MerchandiseOrder[]
+
+  @@map("merchandise")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 3 – Merchandise Orders
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model MerchandiseOrder {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  quantity  Int
+  size      String?
+  status    String   @default("PLACED")
+  orderedAt DateTime @default(now())
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  product Merchandise @relation(fields: [productId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("merchandise_orders")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 3 – Announcements
+// ═══════════════════════════════════════════════════════════════════════════════
+
+model Announcement {
+  id            String    @id @default(uuid())
+  title         String
+  content       String
+  createdById   String
+  publishedAt   DateTime?
+  isPublished   Boolean   @default(false)
+  targetType    String    @default("ALL_MEMBERS")
+  targetEventId String?
+  createdAt     DateTime  @default(now())
+
+  createdBy   User                    @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  targetEvent Event?                  @relation("EventTargetAnnouncements", fields: [targetEventId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  recipients  AnnouncementRecipient[]
+
+  @@map("announcements")
+}
+
+model AnnouncementRecipient {
+  id             String   @id @default(uuid())
+  announcementId String
+  userId         String
+  createdAt      DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user         User         @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([announcementId, userId])
+  @@map("announcement_recipients")
+}
