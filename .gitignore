@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+*.local
+.dev.vars
+
+# Production / Build outputs
+dist/
+dist-ssr/
+.output/
+.nitro/
+.wrangler/
+.tanstack/
+.vinxi/
+
+# Testing & Coverage
+coverage/
+*.lcov
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Archives & Temporary files
+*.zip
+*.tar.gz
+*.rar
+scratch/
+tmp/
+temp/
+
+# Operating System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# IDE & Editor files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.suo
+*.sln
+*.sw?
